@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>录屏示例</title>
+</head>
+
+<body>
+    <p style="width: 70%; float: right; height: 20px; line-height: 10px;">开始后，页面请勿关闭</p>
+    <button id="start">开始录制</button>
+    <label for="frameRateInput">帧率：</label>
+    <input type="number" id="frameRateInput" value="15">
+    <button id="applyFrameRate">应用帧率</button>
+    <p id="resolutionInfo">当前分辨率：未知</p>
+    <p id="frameRateInfo">当前帧率：15</p>
+    <label for="widthInput">宽度：</label>
+    <input type="number" id="widthInput">
+    <label for="heightInput">高度：</label>
+    <input type="number" id="heightInput">
+    <button id="applyResolution">应用分辨率</button>
+    <script>
+        let recorder;
+        let recordingStream;
+        let currentChunk = [];
+        let isRecording = false;
+        let intervalId;
+        let currentRecordingDuration = 0;
+        let pElement = document.querySelector('p');
+        let constraints = {
+            audio: false,
+            video: {
+                displaySurface: "screen",
+                cursor: 'always',
+                frameRate: 15,
+                width: window.screen.width,
+                height: window.screen.height
+            }
+        };
+        document.getElementById('start').addEventListener('click', function () {
+            if (!isRecording) {
+                isRecording = true;
+                navigator.mediaDevices.getDisplayMedia(constraints).then(stream => {
+                    recordingStream = stream;
+                    startRecording(stream);
+                }).catch(error => {
+                    console.error('Error accessing display media:', error);
+                });
+            }
+        });
+        function saveVideo(blob) {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = "录屏_" + new Date().getTime() + '.webm';
+            a.click();
+            URL.revokeObjectURL(a.href);
+            a.remove();
+        }
+        function updateCount() {
+            currentRecordingDuration++;
+            pElement.textContent = '已录制：' + currentRecordingDuration + 's';
+        }
+        function startRecording(stream) {
+            const mime = MediaRecorder.isTypeSupported("video/webm; codecs=vp9")? "video/webm; codecs=vp9" : "video/webm";
+            recorder = new MediaRecorder(stream, { mimeType: mime });
+            recorder.ondataavailable = function (e) {
+                currentChunk.push(e.data);
+            };
+            recorder.onstop = function () {
+                clearInterval(intervalId);
+                const blob = new Blob(currentChunk, { type: 'video/webm' });
+                saveVideo(blob);
+                currentChunk.length = 0;
+            };
+            recorder.start();
+            intervalId = setInterval(updateCount, 1000);
+            window.addEventListener('beforeunload', handleBeforeUnload);
+            function handleBeforeUnload(event) {
+                event.preventDefault();
+                event.returnValue = '正在离开录屏页面，建议确认录屏文件保存后在关闭';
+                return '正在离开录屏页面，建议确认录文件保存后在关闭';
+            }
+            // 更新分辨率和帧率显示
+            document.getElementById('resolutionInfo').textContent = `当前分辨率：${constraints.video.width}x${constraints.video.height}`;
+            document.getElementById('frameRateInfo').textContent = `当前帧率：${constraints.video.frameRate}`;
+        }
+        document.getElementById('applyFrameRate').addEventListener('click', function () {
+            const newFrameRate = parseInt(document.getElementById('frameRateInput').value);
+            constraints.video.frameRate = newFrameRate;
+            if (isRecording) {
+                recorder.stop();
+                recordingStream.getTracks().forEach(track => track.stop());
+                navigator.mediaDevices.getDisplayMedia(constraints).then(stream => {
+                    recordingStream = stream;
+                    startRecording(stream);
+                }).catch(error => {
+                    console.error('Error accessing display media:', error);
+                });
+            }
+        });
+        document.getElementById('applyResolution').addEventListener('click', function () {
+            const newWidth = parseInt(document.getElementById('widthInput').value);
+            const newHeight = parseInt(document.getElementById('heightInput').value);
+            if (!isNaN(newWidth) &&!isNaN(newHeight)) {
+                constraints.video.width = newWidth;
+                constraints.video.height = newHeight;
+                if (isRecording) {
+                    recorder.stop();
+                    recordingStream.getTracks().forEach(track => track.stop());
+                    navigator.mediaDevices.getDisplayMedia(constraints).then(stream => {
+                        recordingStream = stream;
+                        startRecording(stream);
+                    }).catch(error => {
+                        console.error('Error accessing display media:', error);
+                    });
+                }
+            } else {
+                alert('请输入有效的宽度和高度值。');
+            }
+        });
+    </script>
+</body>
+
+</html>
